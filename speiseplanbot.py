@@ -205,6 +205,14 @@ fmode_markup = InlineKeyboardMarkup(kb_fmode)
 # todo: Mehr Optionen (submenu):
     #  InlineKeyboardButton("📅 Termin", callback_data='date')],
     #  InlineKeyboardButton("📄 PDF", callback_data='nextday')]]
+def parse_meal_info(meal):
+        
+    co2 = re.findall(r'(?s)(CO2.*?g)', meal)
+    prices = re.findall(r'(?s)(\d,\d{2} €)', meal)
+    meal_text = re.search(r'(?s)(.*?)((?=CO2)|(?=\d,\d{2} )|$)', meal) # everything before CO2 or prices
+    res_dict = {'meal': meal_text.group(0), 'co2_text': co2, 'prices_text': prices}
+    
+    return res_dict
 
 def format_meals(meal_data: pd.Series, filter='default', fmode='default') -> str:
     """Takes Data of meals in a Series (1 day) and returns it in a pretty format,
@@ -229,13 +237,22 @@ def format_meals(meal_data: pd.Series, filter='default', fmode='default') -> str
     # todo regex filter ('special'), any user defined keywords... sth. like:
     # if filter=='special:
         # filter_values.union(tbd: user_defined_words)
-    
+        
     formatted_meals = []
     for m_idx in meal_data.index:
-        meal = meal_data.loc[m_idx]
+        meal_text = meal_data.loc[m_idx]
         if m_idx:
+            meal_info_dict = parse_meal_info(meal_text)
+            
+            meal = meal_info_dict['meal']
             if meal and meal != 'siehe Monitor': # exclude uninformative "siehe Monitor"
-                # print(meal)
+                co2 = meal_info_dict['co2_text']
+                if co2 : co2 = co2[0]
+                prices = meal_info_dict['prices_text']
+                if prices :
+                    prices = f"S: {prices[0]} | M: {prices[1]} | G: {prices[2]}"
+                
+                # print(meal, co2, prices)
                 addlist = get_adds(meal) # raw numbers and letters
                 additives = ''
                 for i in addlist:
@@ -244,12 +261,12 @@ def format_meals(meal_data: pd.Series, filter='default', fmode='default') -> str
                         additives += add + ", "
                         
                 
-                 
+                # print(meal, meal.lower())
                 # define vegan / vegetarian and meaty/fishy
                 contains_meat = any([f for f in dict(FLEISCH).values() if f in additives]) or \
-                                any([mw for mw in MEATY_WORDS if mw in meal.lower()])
+                                any([mw for mw in MEATY_WORDS if mw.lower() in meal.lower()])
                 contains_fish = any([f for f in dict(FISCH).values() if f in additives]) or \
-                                any([fw for fw in FISHY_WORDS if fw in meal.lower()])
+                                any([fw for fw in FISHY_WORDS if fw.lower() in meal.lower()])
                 vegetarian = not contains_meat and not contains_fish
                 
                 contains_animal_product = any([nv for nv in TIERISCH.values() if nv in additives])
@@ -276,7 +293,7 @@ def format_meals(meal_data: pd.Series, filter='default', fmode='default') -> str
                 
                 if fmode['simple']:
                     formatted_meals.append(
-                    f"<u>{m_idx}</u>\n🍽 <b>{meal}</b>\n<i>-> {veganness}</i>\n\n"
+                    f"<u>{m_idx}</u> → <i>{veganness}</i>\n🍽 <b>{meal}</b>\n{prices}\n\n\n"
                     )
                     continue
                     
@@ -295,19 +312,19 @@ def format_meals(meal_data: pd.Series, filter='default', fmode='default') -> str
                 # mark adds if filtermode set
                 if fmode['mark']:
                     for f in filter_values:
-                        # f = f.lower()
                         danger_pos_adds = additives.find(f)
-                        if danger_pos_adds > 0 :
+                        if danger_pos_adds != -1 :
                             additives = additives[:danger_pos_adds] + "❗" + additives[danger_pos_adds:]
 
-                        danger_pos_meal = meal.lower().find(f)
-                        if danger_pos_meal > 0 :
+                        danger_pos_meal = meal.lower().find(f.lower())
+                        if danger_pos_meal != -1 :
                             meal = meal[:danger_pos_meal] + "❗" + meal[danger_pos_meal:]
                             
                 additives = additives[:-2]
+                newline_str = "\n" # no backslash in f-string
                 
                 formatted_meals.append(
-                    f"<u>{m_idx}</u>\n🍽 <b>{meal}</b>\n<i>-> {veganness}</i>\n<i>{additives}</i>\n\n"
+                    f"""<u>{m_idx}</u> → <i>{veganness}</i>\n🍽 <b>{meal}</b>\n{prices}\n{"<i>"+additives+"</i>"+newline_str if additives else ''}\n\n"""
                     )
                 
     if fmode['default']: # show all meals, dont filter
@@ -366,9 +383,9 @@ def get_next_day(context):
     settings = get_settings(context)
     
     message = 'GESCHLOSSEN'
-    day_counter = 0 # mindestens morgen
+    day_counter = 0 
     while ('GESCHLOSSEN' in message):
-        day_counter += 1
+        day_counter += 1 # mindestens morgen?
         next_day = today + timedelta(days=day_counter)
         message = check_day(next_day,
                             filter = settings['filter_setting'],

@@ -54,7 +54,7 @@ def parse_speiseplan_to_df(fn = "Latest_Speiseplan.pdf") -> pd.DataFrame:
 
     # Cleanup
     #   - delete random invisble crap (gone in newer version (since 22-10-24)), and unnessecary newlines
-    df = df.apply(lambda x: x.str.replace(r"\n?|Mensa HS Prittwitzstraße|hinterhuhinterlegthinterlegt", "", regex=True))
+    # df = df.apply(lambda x: x.str.replace(r"\n?|Mensa HS Prittwitzstraße|hinterhuhinterlegthinterlegt", "", regex=True))
 
     #   - make it nice one-liners
     df = df.apply(lambda x: x.str.replace(r"\n", " ", regex=True))
