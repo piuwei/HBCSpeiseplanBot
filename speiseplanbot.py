@@ -7,14 +7,14 @@ Das ist ein Bot, der infos zum Speiseplan an der HBC gibt. => Git
 TODO-Liste:
 
     ✓ Allergene und Zusatzstoffe parsen (regex pattern = r'\(.*?\)' -> Sachen in klammern)
-    ☐ Allergene und Zusatzstoffe als settings pro chat fixieren (chat_data dict...)
-    ☐ Vegan und vegetarisch...
-    ☐ inline Keyboard? => für manche Funktionen (wie z.B. Allergene etc.) oder alles
-    ☐ nächster Öffnungs-/Arbeitstag, statt "Morgen"?
+    ✓ Allergene und Zusatzstoffe als settings pro chat fixieren (chat_data dict...)
+    ✓ Vegan und vegetarisch...
+    ✓ inline Keyboard? => für manche Funktionen (wie z.B. Allergene etc.) oder alles
+    ✓ nächster Öffnungs-/Arbeitstag, statt "Morgen"?
     ☐ Anpassungen des großen Gesamtplans (Bild Lukas) ??
     ☐ beliebiger Termin => Dialog mit Termineingabe, "maximaler"/letztmöglicher Termin
     ☐ Submenü pdf => nächste Woche oder "großer Gesamtplan"
-    ☐ Öffnungszeiten
+    ✓ Öffnungszeiten
     ✓ "Alle Angaben ohne Gewähr"
 
 """
@@ -48,6 +48,16 @@ SU_WEBSITE = "https://studierendenwerk-ulm.de/essen-trinken/speiseplaene/"
 GO_HUNGRY_MSG = f"""Scheinbar gibt es nichts zu Essen! 😞"""
 
 START_MSG = "Hi 👋👋\nWas hättest du gerne?\n\n"
+
+OPEN_TIMES = """
+<u>Öffnungszeiten Mensa HBC:</u>
+Mo - Do 7.30 bis 16.30 Uhr, Essensausgabe 11.30 bis 13.45 Uhr
+Fr 7.30 bis 14.30 Uhr, Essensausgabe 11.30 bis 13.30 Uhr
+
+<u>Cafeteria Aspach:</u>
+11.45 bis 13.30 Uhr
+
+<i>Stand: Oktober 2022</i>"""
 
 SHORT_DISCLAIMER = "(<i>Alle Angaben ohne Gewähr.</i>)"
 
@@ -681,7 +691,13 @@ def end(update: Update, context: CallbackContext) -> int:
 def help_command(update: Update, context: CallbackContext) -> None:
     """Displays info on how to use the bot."""
     update.message.reply_text(HELP_MSG)
-
+    
+def open_times(update: Update, context: CallbackContext) -> None:
+    """Displays opening times."""
+    update.message.reply_text(OPEN_TIMES,
+                              reply_markup=main_markup,
+                              parse_mode='HTML')
+    
 
 def main() -> None:
     """Run the bot."""
@@ -742,6 +758,9 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler('next', next_day))
     dispatcher.add_handler(CommandHandler('allergene', allergene_jpeg))
     dispatcher.add_handler(CommandHandler('speiseplan_pdf', pdf))
+    dispatcher.add_handler(CommandHandler('open', open_times))
+    
+    
     # dispatcher.add_handler(CommandHandler('cancel', cancel))
 
 
@@ -752,6 +771,7 @@ def main() -> None:
         ("allergene", "Allergene als .jpg schicken"),
         ("speiseplan_pdf", "aktuelle KW als .pdf"),
         ("help", "Hilfe"),
+        ("open", "Zeige Öffnungszeiten Mensa HBC"),
         # ("cancel", "Abbrechen"),
     ]
     
