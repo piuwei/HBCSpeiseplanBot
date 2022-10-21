@@ -27,14 +27,18 @@ from itertools import chain
 
 import pandas as pd
 # python-telegram-bot
-from telegram import ReplyKeyboardMarkup, Update
-from telegram.ext import (CallbackContext, CommandHandler, ConversationHandler,
-                          Filters, MessageHandler, PicklePersistence, Updater)
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup, Update)
+from telegram.ext import (CallbackContext, CallbackQueryHandler,
+                          CommandHandler, ConversationHandler, Filters,
+                          MessageHandler, PicklePersistence, Updater)
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+onoff = lambda x : 'AN' if x else 'AUS'
 
 DAYS = ['MONTAG', 'DIENSTAG', 'MITTWOCH',
         'DONNERSTAG', 'FREITAG', 'SAMSTAG', 'SONNTAG']
@@ -42,6 +46,28 @@ DAYS = ['MONTAG', 'DIENSTAG', 'MITTWOCH',
 SU_WEBSITE = "https://studierendenwerk-ulm.de/essen-trinken/speiseplaene/"
 
 GO_HUNGRY_MSG = f"""Scheinbar gibt es nichts zu Essen! 😞"""
+
+START_MSG = "Hi 👋👋\nWas hättest du gerne?\n\n"
+
+SHORT_DISCLAIMER = "(<i>Alle Angaben ohne Gewähr.</i>)"
+
+DISCLAIMER = """<i>Alle Angaben ohne Gewähr.\nVegan/vegetarisch/Fleisch/Fisch \
+aus angegebenen Zusatzstoffen in Klammern ermittelt. \
+Sind im Speiseplan nicht alle Zusatzstoffe angegeben, oder Klammern falsch gesetzt \
+kann die Interpretation der Mahlzeiten u.U. nicht der Realität entsprechen.</i>
+"""
+FMODE_MENU_MSG ="""
+    Einstellung des Filtermodus:
+ - <u>Alle Additive zeigen</u>: Es werden alle Additive ausgeschrieben und nichts gefiltert
+ - <u>Zutaten markieren</u>: Eingestellte Zutaten werden mit ❗ markiert
+ - <u>Mahlzeiten filtern</u>: Mahlzeiten, die eine eingestellte Zutat enthalten werden rausgefiltert und nicht gezeigt
+ - <u>Zutaten filtern</u>: Nur relevante (eingestellte) Zutaten werden gezeigt.
+"""
+
+MEATY_WORDS = {'fleisch', 'hähnchen', 'pute', 'schwein', 'rind', 'lamm', 'wild', 'geflügel',
+               'wienerle', 'schinken', 'jäger', 'speck', 'backhendl', 'hendl', 'cevapcici', 'kalb'}
+
+FISHY_WORDS = {'lachs', 'fisch', 'scholle'}
 
 # Allergene.jpg
 ZUSATZ_ALLERGENE = {
@@ -58,10 +84,10 @@ ZUSATZ_ALLERGENE = {
     "11": "Alkohol",
     "18": "Gelatine",
     "13": "Krebstiere",
-    "14": "Eier",
+    "14": "🥚 Eier",
     "22": "Erdnüsse",
     "23": "Soja",
-    "24": "Milch/Milchprodukte",
+    "24": "🥛 Milch/Milchprodukte",
     "25": "Schalenfrüchte/alle Nussarten",
     "26": "Sellerie",
     "27": "Senf",
@@ -69,15 +95,11 @@ ZUSATZ_ALLERGENE = {
     "29": "Schwefeldioxid",
     "30": "Sulfite",
     "31": "Lupine",
-    "32": "Weichtiere",
+    "32": "🐙 Weichtiere",
     "34": "Gluten",
-    "35": "Fisch",
+    "35": "🐟 Fisch",
 }
 GELATINE_NUMBER = "18"
-# GELATINE={ # 18
-#     "S"  : "Schwein",
-#     "R"  : "Rind",
-# }
 NUESSE_NUMBER = "25"
 NUESSE = {  # 25
     "H": "Haselnuss",
@@ -97,35 +119,30 @@ GLUTEN = {  # 34
     "D": "Dinkel",
 }
 FLEISCH = {  # einzelner Buchstabe
-    "R": "Rind",
-    "S": "Schwein",
-    "G": "Geflügel",
-    "L": "Lamm",
-    "W": "Wild",
+    "R": "🐄 Rind",
+    "S": "🐖 Schwein",
+    "G": "🐓 Geflügel",
+    "L": "🐑 Lamm",
+    "W": "🦌🐗 Wild",
+}
+FISCH = {   # andere Tiere 
+    "13": "Krebstiere",
+    "32": "🐙 Weichtiere",
+    "35": "🐟 Fisch",
 }
 
 TIERISCH = {  # nicht Fleisch, aber tierisch, also nicht vegan
-    "13": "Krebstiere",
-    "14": "Eier",
+    "14": "🥚 Eier",
     "18": "Gelatine",
-    "24": "Milch/Milchprodukte",
-    "32": "Weichtiere",
-    "35": "Fisch",
+    "24": "🥛 Milch/Milchprodukte",
 }
 
 NICHT_VEGAN = dict(FLEISCH, **TIERISCH)
-NICTH_VEGETARISCH = dict({
+NICHT_VEGETARISCH = dict({
     "13": "Krebstiere",
-    "32": "Weichtiere",
-    "35": "Fisch",
-}, **FLEISCH)
-
-# Vielleicht habe ich mich aber auch geirrt?
-# Mit /speiseplan_pdf kann ich dir zum Nachschauen eine pdf-Datei schicken.
-
-# Alternativ kannst du auch auf der Website des Studierendenwerk Ulm nachschauen:
-# {SU_WEBSITE}
-# """
+    "32": "🐙 Weichtiere",
+    "35": "🐟 Fisch",
+}, **FLEISCH, **FISCH)
 
 HELP_MSG = f"""Schau im Menü was ich alles kann. 😎
 /start um das Hauptmenü zu starten.
@@ -136,60 +153,177 @@ Alternativ kannst du auch auf der Website des Studierendenwerk Ulm nachschauen:
 Alle Angaben ohne Gewähr. :)
 """
 
-COMMANDS = [
-    ("start", "Auswahlmenü starten"),
-    ("heute", "Heute"),
-    ("morgen", "Morgen"),
-    ("allergene", "Allergene schicken"),
-    ("speiseplan_pdf", "aktuelle KW als .pdf"),
-    ("help", "Hilfe"),
-    # ("cancel", "Abbrechen"),
-]
+MAIN_MENU, ADDS_MENU, FILTER_MENU, FMODE_MENU  = range(4)
 
-MAIN_MENU, ADDS_MENU  = range(2)
+# Inline-Keyboards
+kb_main = [
+    [InlineKeyboardButton("👏 Heute", callback_data='today'),
+     InlineKeyboardButton("🌇 Nächstes Mal", callback_data='nextday')],
+    [InlineKeyboardButton("⚙ Einstellungen", callback_data='adds')]
+    ]
+main_markup = InlineKeyboardMarkup(kb_main)
 
-# kb_main = [
-#     ["👏 HEUTE", "📅 Termin"],
-#     ["🌇 Nächster Öffnungstag"],
-#     ["🚫 ALLERGENE", "📄 PDF"]]
-# main_markup = ReplyKeyboardMarkup(kb_main, resize_keyboard=True)
+kb_adds = [
+    [InlineKeyboardButton("Zutaten einstellen", callback_data='filter'),   #> kb_filter
+     InlineKeyboardButton("Filter-Modus", callback_data='fmode')],           #> kb_fmode
+    [InlineKeyboardButton("Einfacher Modus", callback_data='simple')],
+    [InlineKeyboardButton("Zurück", callback_data='back')]
+    ]
+adds_markup = InlineKeyboardMarkup(kb_adds)
 
+FILTER_DICT = {
+        'vegetarian' : 'vegetarisch',
+        'vegan' : 'vegan',
+        'nopig' : 'Schwein',
+        'default' : 'Nichts filtern',
+        }
+kb_filter = [
+    [InlineKeyboardButton("Vegetarisch", callback_data='vegetarian'),
+     InlineKeyboardButton("Vegan", callback_data='vegan')],
+    [InlineKeyboardButton("Schwein", callback_data='nopig'),
+     InlineKeyboardButton("Nichts filtern", callback_data='default')],
+    [InlineKeyboardButton("Zurück", callback_data='back')],
+    #  todo: InlineKeyboardButton("Individuell", callback_data='special'), #> großes Submenu(s) oder texteingabe
+    ]
+filter_markup = InlineKeyboardMarkup(kb_filter)
 
-# kb_adds = [
-#     ["👏 HEUTE", "📅 Termin"],
-#     ["🌇 Nächster Öffnungstag"],
-#     ["🚫 ALLERGENE", "📄 PDF"]]
+DEFAULT_FMODE = {
+            'default' : 1, # showall
+            'filter_adds' : 0,
+            'filter_meals' : 0,
+            'mark' : 0,
+            'simple' : 0, # makes other settings irrelevant
+            }
 
+kb_fmode = [
+    [InlineKeyboardButton("Alle Additive zeigen", callback_data='default'),      # Alles wird gezeigt/geparst, nix gefiltert
+     InlineKeyboardButton("Zutaten markieren", callback_data='mark')],     # Eingestellte Zutaten werden mit❗und <b> </b>markiert
+    [InlineKeyboardButton("Mahlzeiten filtern", callback_data='filter_meals'),     # Mahlzeiten mit markierten Zutaten werden nicht gezeigt
+     InlineKeyboardButton("Zutaten filtern", callback_data='filter_adds')],       # Nur eingestellte Zutaten zeigen
+    [InlineKeyboardButton("Zurück", callback_data='back')],
+     ]
+fmode_markup = InlineKeyboardMarkup(kb_fmode)
 
+# todo: Mehr Optionen (submenu):
+    #  InlineKeyboardButton("📅 Termin", callback_data='date')],
+    #  InlineKeyboardButton("📄 PDF", callback_data='nextday')]]
 
+def format_meals(meal_data: pd.Series, filter='default', fmode='default') -> str:
+    """Takes Data of meals in a Series (1 day) and returns it in a pretty format,
+    TODO: Zutaten Filtern nach geg. Einstellungen in chat_data
+     
+    """
 
-
-def format_meals(meal_data: pd.Series) -> str:
-    """Takes Data of meals in a Series (1 day) and returns it in a pretty format"""
-
-    formatted_meals = ""
     if any(meal_data == "GESCHLOSSEN"):
         return "GESCHLOSSEN"
     elif any(meal_data == "WOCHENENDE"):
         return "WOCHENENDE, GESCHLOSSEN"
-
+        
+    if filter=='default':
+        filter_values = []
+    elif filter=='vegetarian':
+        filter_values = set().union(*[NICHT_VEGETARISCH.values(), MEATY_WORDS, FISHY_WORDS])
+    elif filter=='vegan':
+        filter_values = set().union(*[NICHT_VEGAN.values(), TIERISCH.values(), MEATY_WORDS, FISHY_WORDS])
+    elif filter=='nopig':
+        filter_values = ['schwein']
+        
+    # todo regex filter ('special'), any user defined keywords... sth. like:
+    # if filter=='special:
+        # filter_values.union(tbd: user_defined_words)
+    
+    formatted_meals = []
     for m_idx in meal_data.index:
         meal = meal_data.loc[m_idx]
         if m_idx:
-            if meal:
-                addlist = get_adds(meal)
+            if meal and meal != 'siehe Monitor': # exclude uninformative "siehe Monitor"
+                # print(meal)
+                addlist = get_adds(meal) # raw numbers and letters
                 additives = ''
                 for i in addlist:
-                    add = translate_add(i)
+                    add = translate_add(i) # translated string value
                     if add not in additives:
                         additives += add + ", "
+                        
+                
+                 
+                # define vegan / vegetarian and meaty/fishy
+                contains_meat = any([f for f in dict(FLEISCH).values() if f in additives]) or \
+                                any([mw for mw in MEATY_WORDS if mw in meal.lower()])
+                contains_fish = any([f for f in dict(FISCH).values() if f in additives]) or \
+                                any([fw for fw in FISHY_WORDS if fw in meal.lower()])
+                vegetarian = not contains_meat and not contains_fish
+                
+                contains_animal_product = any([nv for nv in TIERISCH.values() if nv in additives])
+                vegan = not contains_animal_product and vegetarian
+                
+                # check for level of veganity/veganness/animality
+                veganness = 'veganität unklar, '
+                prefix_len = len(veganness)
+                sep = ', '
+                
+                # x = lambda x, msg, sep: msg + x + sep
+                if contains_meat:
+                    veganness += "enthält Fleisch" + sep
+                    
+                if contains_fish:
+                    veganness += "enthält Fisch/Meeresfrüchte" + sep
+                    
+                if vegan:
+                    veganness += "vegan" + sep
+                elif vegetarian:
+                    veganness += "vegetarisch" + sep
+                
+                veganness = veganness[prefix_len:-len(sep)]
+                
+                if fmode['simple']:
+                    formatted_meals.append(
+                    f"<u>{m_idx}</u>\n🍽 <b>{meal}</b>\n<i>-> {veganness}</i>\n\n"
+                    )
+                    continue
+                    
+                # show only relevant adds if filtermode set
+                if fmode['filter_adds'] and not fmode['default']:
+                    additives = ''
+                    for i in addlist:
+                        add = translate_add(i)
+                        if filter_values:
+                            for f in filter_values:
+                                if f in add and add not in additives:
+                                    additives += add + ", "
+                        else:
+                            additives += add + ", "
+                                
+                # mark adds if filtermode set
+                if fmode['mark']:
+                    for f in filter_values:
+                        # f = f.lower()
+                        danger_pos_adds = additives.find(f)
+                        if danger_pos_adds > 0 :
+                            additives = additives[:danger_pos_adds] + "❗" + additives[danger_pos_adds:]
 
-                formatted_meals += f"<b>{m_idx}</b>\n{meal}\n<i>Allergene/Zusatzstoffe: {additives}</i>\n\n"
-
+                        danger_pos_meal = meal.lower().find(f)
+                        if danger_pos_meal > 0 :
+                            meal = meal[:danger_pos_meal] + "❗" + meal[danger_pos_meal:]
+                            
+                additives = additives[:-2]
+                
+                formatted_meals.append(
+                    f"<u>{m_idx}</u>\n🍽 <b>{meal}</b>\n<i>-> {veganness}</i>\n<i>{additives}</i>\n\n"
+                    )
+                
+    if fmode['default']: # show all meals, dont filter
+        return formatted_meals
+                                    
+    if fmode['filter_meals']:
+        formatted_meals_new = []
+        for formatted_meal in formatted_meals:
+            if not [f for f in filter_values if f.lower() in formatted_meal.lower()]:
+                formatted_meals_new.append(formatted_meal)
+        formatted_meals = formatted_meals_new
     return formatted_meals
-
-
-def check_day(lookday: datetime) -> str:
+    
+def check_day(lookday: datetime, filter='default', fmode='default') -> str:
     """Checks for the given day and constructs a response message.
 
     Example:
@@ -222,99 +356,205 @@ def check_day(lookday: datetime) -> str:
         elif lookday.weekday() == i:
             r_meals = meal_data[d]
 
-    message = f"<b>{r_weekday}, {r_date}</b>\n\n{format_meals(r_meals)}"
+    message = f"<b>{r_weekday}, {r_date}</b>\n\n" + "".join(format_meals(r_meals,
+                                                                         filter=filter,
+                                                                         fmode=fmode))
+    return message
+
+def get_next_day(context):
+    """take df and get next row from today or lookday"""
+
+    today = datetime.today()
+    settings = get_settings(context)
+    
+    message = 'GESCHLOSSEN'
+    day_counter = 0 # mindestens morgen
+    while ('GESCHLOSSEN' in message):
+        day_counter += 1
+        next_day = today + timedelta(days=day_counter)
+        message = check_day(next_day,
+                            filter = settings['filter_setting'],
+                            fmode = settings['fmode_setting'])
+        
     return message
 
 
-def get_next_day(df, lookday=None):
-    """take df and get next row from today or lookday"""
-
-    if not lookday:
-        lookday = datetime.today()
-    if lookday.date() in df.index.date:
-        return df.loc[str(lookday)]
-    else:
-        diff_df = df.index-lookday
-        return df.loc[diff_df >= timedelta(days=0)].iloc[0]
-
-
 def start(update: Update, context: CallbackContext) -> int:
+    
+    # make default settings
+    chat_keys = context.chat_data.keys()
+    if 'filter_setting' not in chat_keys: 
+        context.chat_data['filter_setting'] = 'default'
+        
+    if 'fmode_setting' not in chat_keys: 
+        context.chat_data['fmode_setting'] = DEFAULT_FMODE
 
-    keyboard = [["👏 HEUTE", "📅 Termin"], [
-        "🌇 Nächster Öffnungstag"], ["🚫 ALLERGENE", "📄 PDF"]]
-
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    update.message.reply_text(
-        'Siehe Auswahlmenü unten', reply_markup=reply_markup)
+    update.message.reply_text(START_MSG + SHORT_DISCLAIMER,
+                              reply_markup=main_markup,
+                              parse_mode='HTML')
 
     return MAIN_MENU
 
+def get_settings(context: CallbackContext):
+    settings = {}
+    if 'filter_setting' in context.chat_data.keys():
+        filter_setting = context.chat_data['filter_setting']
+    else:
+        filter_setting = 'default'
+
+    if 'fmode_setting' in context.chat_data.keys():
+        fmode_setting = context.chat_data['fmode_setting']
+    else:
+        fmode_setting = DEFAULT_FMODE
+        
+    settings['filter_setting'] = filter_setting
+    settings['fmode_setting'] = fmode_setting
+    return settings
 
 def heute(update: Update, context: CallbackContext) -> int:
     """Send today's meals."""
 
+    query = update.callback_query
+    query.answer()
+    
     # fetch data
     today = datetime.today()
-
+    settings = get_settings(context)
+    
     # pack message
-    message = check_day(today)
-    context.bot.send_message(
-        chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
-
+    message = check_day(today,
+                        filter = settings['filter_setting'],
+                        fmode = settings['fmode_setting'])
+    query.edit_message_text(message, reply_markup=main_markup, parse_mode='HTML')
     return MAIN_MENU
 
 
-def morgen(update: Update, context: CallbackContext) -> int:
-    """Send tomorrow's meals."""
-
-    # fetch data
-    today = datetime.today()
-    tomorrow = today + timedelta(days=1)
-
-    # pack & send message
-    message = check_day(tomorrow)
-    context.bot.send_message(
-        chat_id=update.effective_chat.id, text=message, parse_mode='HTML')
-
+def next_day(update: Update, context: CallbackContext) -> int:
+    """Send next opening day's meals."""
+    
+    query = update.callback_query
+    query.answer()
+    
+    message = get_next_day(context)
+    query.edit_message_text(message, reply_markup=main_markup, parse_mode='HTML')
+    
     return MAIN_MENU
 
 
 def adds_menu(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    message ="""
+ - <u>Zutaten einstellen</u>: Hier können die Zutaten eingestellt werden, die markiert oder gefiltert werden sollen
+ - <u>Filter-Modus</u>: Hier kann eingstellt werden, ob gefiltert und/oder markiert werden soll.
+ - <u>Einfacher Modus</u>: Speiseplan ohne ausgeschriebene Zutaten zeigen.
+"""
+    # query.edit_message_reply_markup(reply_markup=adds_markup)
+    
+    query.edit_message_text(message, reply_markup=adds_markup, parse_mode='HTML')
     return ADDS_MENU
 
+def filter_menu(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    # message = "FILTER"
+    query.edit_message_reply_markup(reply_markup=filter_markup)
+    
+    # query.edit_message_text(message, reply_markup=filter_markup, parse_mode='HTML')
+    return FILTER_MENU
 
-def allergene(update: Update, context: CallbackContext) -> int:
-    """Send allergene pic or send msg, that its pinned already
+def fmode_menu(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    message = FMODE_MENU_MSG
+    query.edit_message_text(message,
+                            reply_markup=fmode_markup,
+                            parse_mode='HTML')
+    return FMODE_MENU
 
-       #todo: => umbenennen/zusatzfunktion "DIÄT" o.ä. \
-        -   Submenu => 1. Vegetarisch, 2. Vegan, 3. kein Schwein\
-            4. individuelle Eingabe => Liste anzeigen, Zahleninput/Buchstabeninput verarbeiten
-            -> chat_data['add_filter']
+def pretty_settings(settings):
+    
+    print(settings['filter_setting'], settings['fmode_setting'])
+    message = ''
+    simple_mode = settings['fmode_setting']['simple']
+    if simple_mode:
+        message += f"<b>EINFACHER MODUS AN </b>\n(Filter-Einstellungen wirkungslos)\n\n<s>"
+        
+    if settings['filter_setting']:
+        fsetting = settings['filter_setting']
+        message += f"Filter: {FILTER_DICT[fsetting]}\n"
+        # todo: add user-defined filter keywords
+        
+    if settings['fmode_setting'] and settings['fmode_setting']['default']:
+        fmode = settings['fmode_setting']
+        message += f"""Filtermodus gewählt:
+- <b>Alle Additive zeigen: {onoff(fmode['default'])}</b>
+- Zutaten markieren: {onoff(fmode['mark'])}{"</s>" if simple_mode else ""}<s>
+- Mahlzeiten filtern: {onoff(fmode['filter_meals'])}
+- Zutaten filtern: {onoff(fmode['filter_adds'])}</s>"""
 
-        -   Menu für allergene Modus: chat_data['modus']
-                ALL: Zeige alle Additive (eingestellte Additive wirkungslos, aber nicht gelöscht),
-                MAR_A: markiere eingestellte Additive mit ‼ (Double Exclamation Mark Emoji) oder ❗ ,
-                    und fett <b> </b>, und zeige alle
-                FIL_M: filtere die komplette Mahlzeit, die eines der eingestellten additive enthält 
-                FIL_A: zeige nur eingestellte additive, alle Mahl        
-    """
+    elif settings['fmode_setting']:
+        fmode = settings['fmode_setting']
+        message += f"""Filtermodus gewählt:
+- Alle Additive zeigen: {onoff(fmode['default'])}
+- Zutaten markieren: {onoff(fmode['mark'])}
+- Mahlzeiten filtern: {onoff(fmode['filter_meals'])}
+- Zutaten filtern: {onoff(fmode['filter_adds'])}{"</s>" if simple_mode else ""}"""
 
+    return message
+
+def set_simple_mode(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    qd = query.data
+    
+    context.chat_data['fmode_setting'][qd] ^= 1
+    
+    next_day = get_next_day(context)
+    preview = f"VORSCHAU DER EINSTELLUNGEN:\n\n{next_day}"    
+    message = f"{preview}\n\n{pretty_settings(context.chat_data)}"
+
+    query.edit_message_text(message, reply_markup=adds_markup, parse_mode='HTML')
+    
+    return ADDS_MENU
+    
+
+
+def set_filter(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    
+    context.chat_data['filter_setting'] = query.data
+    
+    next_day = get_next_day(context)
+    preview = f"VORSCHAU DER EINSTELLUNGEN:\n\n{next_day}"
+    message = f"{preview}\n\n{pretty_settings(context.chat_data)}"
+    
+    query.edit_message_text(message,
+                            reply_markup=filter_markup,
+                            parse_mode='HTML')
+    
+    return FILTER_MENU
+    
+def set_fmode(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    query.answer()
+    qd = query.data
+    
+    context.chat_data['fmode_setting'][qd] ^= 1 # toggle setting
+    
+    next_day = get_next_day(context)    
+    preview = f"VORSCHAU DER EINSTELLUNGEN:\n\n{next_day}"
+    message = f"{preview}\n\n{pretty_settings(context.chat_data)}"
+    
+    query.edit_message_text(message, reply_markup=fmode_markup, parse_mode='HTML')
+    
+    return FMODE_MENU
+
+def allergene_jpeg(update: Update, context: CallbackContext) -> int:
+    """Send allergene pic"""
+    
     allerg_pic_fn = "./allergene_09-2022.jpg"
-
-    this_chat = context.bot.get_chat(chat_id=update.effective_chat.id)
-
-    already_pinned_msg = """
-    Sieht so aus, als wären die Allergene schon ⬆ angepinnt 📌.
-    """
-    # can only get one pinned message, so better ever only pin one
-    # if this_chat.pinned_message:
-    #     if this_chat.pinned_message.document:
-    #         pin_fname = this_chat.pinned_message.document.file_name
-    #         if "allergene" in pin_fname:
-    #             context.bot.send_message(chat_id=update.effective_chat.id,
-    #                                      text=already_pinned_msg,
-    #                                      parse_mode='HTML')
-    # else:
     with open(allerg_pic_fn, 'rb') as f:
         chat_id = update.effective_chat.id
         allergene_msg = context.bot.send_document(chat_id, f)
@@ -360,23 +600,23 @@ def translate_add(additive: str) -> str:
     words = ''
     try:
         if number:
-            words += f'{number}: {ZUSATZ_ALLERGENE[number]} '
+            words += f"{number}={ZUSATZ_ALLERGENE[number]}"
 
         if letter:
             if not number:  # => Fleisch?, einzelner Buchstabe
-                words += f"{letter}: {FLEISCH[letter]}"
+                words += f"{letter}={FLEISCH[letter]}"
             elif number == GELATINE_NUMBER:
-                words += f"{letter}: {FLEISCH[letter]}"
+                words = f"{number}{letter}={FLEISCH[letter]}~{ZUSATZ_ALLERGENE[number]}"
             elif number == GLUTEN_NUMBER:
-                words += f"{letter}: {GLUTEN[letter]}"
+                words = f"{number}{letter}={GLUTEN[letter]}~{ZUSATZ_ALLERGENE[number]}"
             elif number == NUESSE_NUMBER:
-                words += f"{letter}: {NUESSE[letter]}"
+                words = f"{number}{letter}={NUESSE[letter]}"
             else:
-                words += f"{letter}: N/A"
+                words += f"{letter}=N/A"
 
     except KeyError:
         # print("ERROR: Unbekannter Zusatzstoff oder Allergen. Möglicherweise muss die Liste aktualisiert werden. Oder ein Eintragungsfehler im Speiseplan besteht.")
-        words = f"'{number}{letter}': N/A"
+        words = f"'{number}{letter}'=N/A"
 
     return words
 
@@ -392,12 +632,33 @@ def pdf(update: Update, context: CallbackContext) -> int:
         context.bot.send_document(chat_id, f)
     return MAIN_MENU
 
-
-def cancel(update: Update, context: CallbackContext) -> int:
+def back_to_main(update: Update, context: CallbackContext) -> int:
     """Returns to menu start"""
-    # maybe add something here later
+    query = update.callback_query
+    query.answer()
+    
+    query.edit_message_text(START_MSG + SHORT_DISCLAIMER,
+                            reply_markup=main_markup, parse_mode='HTML')
+    
     return MAIN_MENU
 
+def back_to_adds(update: Update, context: CallbackContext) -> int:
+    """Returns to menu start"""
+    query = update.callback_query
+    query.answer()
+    
+    query.edit_message_reply_markup(reply_markup=adds_markup)
+    
+    return ADDS_MENU
+
+def back_to_filter(update: Update, context: CallbackContext) -> int:
+    """Returns to menu start"""
+    query = update.callback_query
+    query.answer()
+    
+    query.edit_message_reply_markup(reply_markup=filter_markup, parse_mode='HTML')
+    
+    return FILTER_MENU
 
 def end(update: Update, context: CallbackContext) -> int:
     """Returns to menu start"""
@@ -412,7 +673,7 @@ def help_command(update: Update, context: CallbackContext) -> None:
 
 def main() -> None:
     """Run the bot."""
-
+    
     # read config and store each line in config_dict
     config_filename = "devbot.conf"
     # config_filename = "speiseplanbot.conf"
@@ -438,23 +699,50 @@ def main() -> None:
         # per_message = True,
         entry_points=[CommandHandler("start", start)],
         states={
-            MAIN_MENU: [MessageHandler(Filters.regex(r"HEUTE"), heute),
-                   MessageHandler(Filters.regex(r"MORGEN"), morgen),
-                   MessageHandler(Filters.regex(r"ALLERGENE"), allergene),
-                   MessageHandler(Filters.regex(r"PDF"), pdf)]
+            MAIN_MENU: [
+                CallbackQueryHandler(heute, pattern = r"^today$"),
+                CallbackQueryHandler(next_day, pattern = r"^nextday$"),
+                CallbackQueryHandler(adds_menu, pattern = r"^adds$"),
+                #    MessageHandler(Filters.regex(r"PDF"), pdf)
+                ],
+            ADDS_MENU: [
+                CallbackQueryHandler(filter_menu, pattern = r"^filter$"),
+                CallbackQueryHandler(fmode_menu, pattern = r"^fmode$"),
+                CallbackQueryHandler(set_simple_mode, pattern = r"^simple$"),
+                CallbackQueryHandler(back_to_main, pattern = r"^back$"),
+                ],
+            FILTER_MENU: [
+                CallbackQueryHandler(set_filter, pattern = r"^default|vegetarian|vegan|nopig|special$"),
+                CallbackQueryHandler(back_to_adds, pattern = r"^back$"),
+                ],
+            FMODE_MENU: [
+                CallbackQueryHandler(set_fmode, pattern = r"^default|mark|filter_meals|filter_adds$"),
+                CallbackQueryHandler(back_to_adds, pattern = r"^back$"),
+                ],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("start", start)],
     )
 
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(CommandHandler('start', start))
     dispatcher.add_handler(CommandHandler('help', help_command))
-    dispatcher.add_handler(CommandHandler('heute', heute))
-    dispatcher.add_handler(CommandHandler('morgen', morgen))
-    dispatcher.add_handler(CommandHandler('allergene', allergene))
+    # dispatcher.add_handler(CommandHandler('heute', heute))
+    # dispatcher.add_handler(CommandHandler('morgen', morgen))
+    dispatcher.add_handler(CommandHandler('allergene', allergene_jpeg))
     dispatcher.add_handler(CommandHandler('speiseplan_pdf', pdf))
-    dispatcher.add_handler(CommandHandler('cancel', cancel))
+    # dispatcher.add_handler(CommandHandler('cancel', cancel))
 
+
+    COMMANDS = [
+        ("start", "Auswahlmenü starten"),
+        ("heute", "Heute"),
+        ("next", "Nächster Öffnungstag"),
+        ("allergene", "Allergene schicken"),
+        ("speiseplan_pdf", "aktuelle KW als .pdf"),
+        ("help", "Hilfe"),
+        # ("cancel", "Abbrechen"),
+    ]
+    
     dispatcher.bot.set_my_commands(COMMANDS)
 
     # Start the Bot

@@ -4,6 +4,8 @@ from datetime import date, datetime
 import camelot
 import pandas as pd
 
+from speiseplanbot import DAYS
+
 
 def get_calendarweek(datestring = "07.10.2022") -> int:
     pdate = datetime.strptime(datestring, "%d.%m.%Y")
@@ -13,12 +15,12 @@ def get_calendarweek(datestring = "07.10.2022") -> int:
 def parse_date_from_pdf(fn = "Latest_Speiseplan.pdf", which_date=1) -> str:
     dates = camelot.read_pdf(fn,
                             flavor='stream',
-                            table_areas = ['10,590,280,520'],
+                            table_areas = ['10,540,150,520'],
                             # position of title and dates, may need to adjust in future versions, '0,0,0,0' in bottom left corner
                             )
     
-    datumsangaben = dates[0].df.iloc[1].loc[0].split(' ')
-    datestring = datumsangaben[which_date]
+    datumsangaben = dates[0].df.iloc[0].loc[0].split('–')
+    datestring = datumsangaben[which_date].strip()
     
     if which_date==0:
         today = date.today()
@@ -33,35 +35,33 @@ def parse_speiseplan_to_df(fn = "Latest_Speiseplan.pdf") -> pd.DataFrame:
     
     Also does some basic cleanup of data specific to HBC-Speiseplan file.
     """
-    # todo: scan for vegan / vegetarian pictures
+    # todo: scan for vegan / vegetarian pictures, possible? => mini pics in new layout
     
-    # good settings as of 22-09-29, possibly needs adjustments on changes in table layout
+    # settings changed for new table layout on 22-10-21
     tables_lattice = camelot.read_pdf(fn,
-                          flavor='lattice',
-                          process_background = True,
-                          suppress_stdout=True, #quiet
-                          line_tol = 2.5,
-                          threshold_blocksize = 15,
-                          shift_text = ['b'],
-                          split_text = False,
-                          layout_kwargs={'detect_vertical': False, 'word_margin' : 0.15},
-                          ) 
+                                      flavor='lattice',
+                                      suppress_stdout = True,
+                                      #   process_background = True,
+                                      #   suppress_stdout=True, #quiet
+                                      #   line_tol = 2.5,
+                                      #   threshold_blocksize = 15,
+                                      #   shift_text = ['b'],
+                                      #   split_text = False,
+                                      #   layout_kwargs={'detect_vertical': False, 'word_margin' : 0.15},
+                                      )
     
     df = tables_lattice[0].df
 
     # Cleanup
-    #   - delete random invisble crap and unnessecary newlines
+    #   - delete random invisble crap (gone in newer version (since 22-10-24)), and unnessecary newlines
     df = df.apply(lambda x: x.str.replace(r"\n?|Mensa HS Prittwitzstraße|hinterhuhinterlegthinterlegt", "", regex=True))
 
     #   - make it nice one-liners
     df = df.apply(lambda x: x.str.replace(r"\n", " ", regex=True))
-    
+
     #   - indexing, and col naming
-    df[0].iloc[0] = "KATEGORIE"
-    df = df.rename(columns=df.iloc[0])\
-           .drop(0, axis=0)\
-           .set_index("KATEGORIE", verify_integrity=True)
-           
+    df.columns = ['KATEGORIE'] + DAYS[:5]
+    df = df.set_index('KATEGORIE', verify_integrity=True)
     df.index = df.index.str.strip()
     
     return df
@@ -70,10 +70,10 @@ def main():
     
     # todo: autodelete old csv files (e.g. older than 4 weeks)
 
-    today = date.today()
-    current_cw = today.isocalendar()[1]
-    next_cw = today.isocalendar()[1] + 1
-    yyyy = today.year
+    today       = date.today()
+    current_cw  = today.isocalendar()[1]
+    next_cw     = today.isocalendar()[1] + 1
+    yyyy        = today.year
 
     try: #current week, should be there 
         file = f"./Speiseplan_CW{current_cw}_{yyyy}.pdf"
@@ -95,9 +95,13 @@ def main():
         pdate = parse_date_from_pdf(file)
         cw = get_calendarweek(pdate)
         
-        df.to_csv(f'./Meals_CW{cw}.csv')
+        df.to_csv(f'./Meals_CW{cw}.csv'),
+    except FileNotFoundError:
+        print(f'CW{cw}, not there (yet?)')
+        pass # else
+    
     except:
-        pass
+        raise
     
 if __name__ == "__main__":
     main()

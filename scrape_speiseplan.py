@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import urllib.request
-from datetime import date
+from datetime import date, datetime
 
 from bs4 import BeautifulSoup
 
@@ -24,19 +24,26 @@ def get_menulinks(menuurl = 'https://studierendenwerk-ulm.de/essen-trinken/speis
     return foodlinks
                     
 def save_speiseplan(pdf_dl, fname) -> None:
-    with open(f"./dld/{fname}", 'wb') as f:
+    
+    fpath = "./dld/"
+    with open(f"{fpath}{fname}", 'wb') as f:
         f.write(pdf_dl)
         
     # store a copy with calendar week parsed from inside the pdf (in case filename is "wrong")
-    # this is the one we use
-    pdate = parse_date_from_pdf(f"./dld/{fname}")
-    cw = get_calendarweek(pdate)
-    yyyy = date.today().year
-    
-    with open(f"./Speiseplan_CW{cw}_{yyyy}.pdf", 'wb') as f:
-        f.write(pdf_dl)
+    # this is the one we use, for more consistent filenames
+    try:
+        pdate = parse_date_from_pdf(f"{fpath}{fname}")
+        cw = get_calendarweek(pdate)
+        yyyy = date.today().year
         
-    print(f"saved --> ./dld/{fname}, ./Speiseplan_CW{cw}_{yyyy}.pdf")
+        with open(f"./Speiseplan_CW{cw}_{yyyy}.pdf", 'wb') as f:
+            f.write(pdf_dl)
+            
+        print(f"saved --> {fpath}{fname}, ./Speiseplan_CW{cw}_{yyyy}.pdf")
+        
+    except IndexError:
+        print(f"{datetime.now()} - ERROR: IndexError with {fpath}{fname}, skipping. Parser probably needs adjusting (e.g. table format changed) !!")
+        pass
     
 def main():
     
