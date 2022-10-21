@@ -505,6 +505,12 @@ def pretty_settings(settings):
 
     return message
 
+def make_preview(context):
+    next_day = get_next_day(context)
+    preview = f"VORSCHAU DER EINSTELLUNGEN:\n\n{next_day}"
+    message = f"{preview}\n\n{pretty_settings(context.chat_data)}"
+    return message
+
 def set_simple_mode(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
@@ -512,30 +518,21 @@ def set_simple_mode(update: Update, context: CallbackContext) -> int:
     
     context.chat_data['fmode_setting'][qd] ^= 1
     
-    next_day = get_next_day(context)
-    preview = f"VORSCHAU DER EINSTELLUNGEN:\n\n{next_day}"    
-    message = f"{preview}\n\n{pretty_settings(context.chat_data)}"
-
+    message = make_preview(context)
     query.edit_message_text(message, reply_markup=adds_markup, parse_mode='HTML')
     
     return ADDS_MENU
     
-
-
 def set_filter(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
     query.answer()
     
     context.chat_data['filter_setting'] = query.data
     
-    next_day = get_next_day(context)
-    preview = f"VORSCHAU DER EINSTELLUNGEN:\n\n{next_day}"
-    message = f"{preview}\n\n{pretty_settings(context.chat_data)}"
-    
+    message = make_preview(context)
     query.edit_message_text(message,
                             reply_markup=filter_markup,
                             parse_mode='HTML')
-    
     return FILTER_MENU
     
 def set_fmode(update: Update, context: CallbackContext) -> int:
@@ -545,12 +542,8 @@ def set_fmode(update: Update, context: CallbackContext) -> int:
     
     context.chat_data['fmode_setting'][qd] ^= 1 # toggle setting
     
-    next_day = get_next_day(context)    
-    preview = f"VORSCHAU DER EINSTELLUNGEN:\n\n{next_day}"
-    message = f"{preview}\n\n{pretty_settings(context.chat_data)}"
-    
+    message = make_preview(context)    
     query.edit_message_text(message, reply_markup=fmode_markup, parse_mode='HTML')
-    
     return FMODE_MENU
 
 def allergene_jpeg(update: Update, context: CallbackContext) -> int:
