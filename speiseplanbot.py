@@ -144,11 +144,9 @@ NICHT_VEGETARISCH = dict({
     "35": "🐟 Fisch",
 }, **FLEISCH, **FISCH)
 
-HELP_MSG = f"""Schau im Menü was ich alles kann. 😎
+HELP_MSG = f"""
 /start um das Hauptmenü zu starten.
-
-Alternativ kannst du auch auf der Website des Studierendenwerk Ulm nachschauen:
-{SU_WEBSITE}
+Da können auch verschiedene Einstellungen gemacht werden.
 
 Alle Angaben ohne Gewähr. :)
 """
@@ -411,12 +409,21 @@ def get_settings(context: CallbackContext):
     settings['fmode_setting'] = fmode_setting
     return settings
 
-def heute(update: Update, context: CallbackContext) -> int:
+def respond_via_cmd_or_conv(message, markup, conv_state, update, context):
+    if update.callback_query: # Inline Conversation / Menu
+        query = update.callback_query
+        query.answer()
+        query.edit_message_text(message, reply_markup=markup, parse_mode='HTML')
+        return conv_state
+    else: # call from command
+        context.bot.send_message(chat_id=update.message.chat_id,
+                                    text=message,
+                                    parse_mode='HTML')
+        return None
+            
+def today(update: Update, context: CallbackContext):
     """Send today's meals."""
 
-    query = update.callback_query
-    query.answer()
-    
     # fetch data
     today = datetime.today()
     settings = get_settings(context)
@@ -425,20 +432,15 @@ def heute(update: Update, context: CallbackContext) -> int:
     message = check_day(today,
                         filter = settings['filter_setting'],
                         fmode = settings['fmode_setting'])
-    query.edit_message_text(message, reply_markup=main_markup, parse_mode='HTML')
-    return MAIN_MENU
+    
+    return respond_via_cmd_or_conv(message, main_markup, MAIN_MENU, update, context)
 
-
-def next_day(update: Update, context: CallbackContext) -> int:
+def next_day(update: Update, context: CallbackContext):
     """Send next opening day's meals."""
-    
-    query = update.callback_query
-    query.answer()
-    
+        
     message = get_next_day(context)
-    query.edit_message_text(message, reply_markup=main_markup, parse_mode='HTML')
-    
-    return MAIN_MENU
+        
+    return respond_via_cmd_or_conv(message, main_markup, MAIN_MENU, update, context)
 
 
 def adds_menu(update: Update, context: CallbackContext) -> int:
@@ -700,7 +702,7 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             MAIN_MENU: [
-                CallbackQueryHandler(heute, pattern = r"^today$"),
+                CallbackQueryHandler(today, pattern = r"^today$"),
                 CallbackQueryHandler(next_day, pattern = r"^nextday$"),
                 CallbackQueryHandler(adds_menu, pattern = r"^adds$"),
                 #    MessageHandler(Filters.regex(r"PDF"), pdf)
@@ -726,8 +728,8 @@ def main() -> None:
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(CommandHandler('start', start))
     dispatcher.add_handler(CommandHandler('help', help_command))
-    # dispatcher.add_handler(CommandHandler('heute', heute))
-    # dispatcher.add_handler(CommandHandler('morgen', morgen))
+    dispatcher.add_handler(CommandHandler('today', today))
+    dispatcher.add_handler(CommandHandler('next', next_day))
     dispatcher.add_handler(CommandHandler('allergene', allergene_jpeg))
     dispatcher.add_handler(CommandHandler('speiseplan_pdf', pdf))
     # dispatcher.add_handler(CommandHandler('cancel', cancel))
@@ -735,9 +737,9 @@ def main() -> None:
 
     COMMANDS = [
         ("start", "Auswahlmenü starten"),
-        ("heute", "Heute"),
+        ("today", "Heute"),
         ("next", "Nächster Öffnungstag"),
-        ("allergene", "Allergene schicken"),
+        ("allergene", "Allergene als .jpg schicken"),
         ("speiseplan_pdf", "aktuelle KW als .pdf"),
         ("help", "Hilfe"),
         # ("cancel", "Abbrechen"),
