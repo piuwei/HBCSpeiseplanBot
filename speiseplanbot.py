@@ -47,7 +47,7 @@ SU_WEBSITE = "https://studierendenwerk-ulm.de/essen-trinken/speiseplaene/"
 
 GO_HUNGRY_MSG = f"""Scheinbar gibt es nichts zu Essen! 😞"""
 
-START_MSG = "Hi 👋👋\nWas hättest du gerne?\n\n"
+START_MSG = """Hi 👋👋\nWas hättest du gerne?\n\n"""
 
 OPEN_TIMES = """
 <u>Öffnungszeiten Mensa HBC:</u>
@@ -61,11 +61,11 @@ Fr 7.30 bis 14.30 Uhr, Essensausgabe 11.30 bis 13.30 Uhr
 
 SHORT_DISCLAIMER = "(<i>Alle Angaben ohne Gewähr.</i>)"
 
-DISCLAIMER = """<i>Alle Angaben ohne Gewähr.\nVegan/vegetarisch/Fleisch/Fisch \
-aus angegebenen Zusatzstoffen in Klammern ermittelt. \
+DISCLAIMER = """<i>Alle Angaben ohne Gewähr.\n\
 Sind im Speiseplan nicht alle Zusatzstoffe angegeben, oder Klammern falsch gesetzt \
 kann die Interpretation der Mahlzeiten u.U. nicht der Realität entsprechen.</i>
 """
+
 FMODE_MENU_MSG ="""
     Einstellung des Filtermodus:
  - <u>Alle Additive zeigen</u>: Es werden alle Additive ausgeschrieben und nichts gefiltert
@@ -74,10 +74,10 @@ FMODE_MENU_MSG ="""
  - <u>Zutaten filtern</u>: Nur relevante (eingestellte) Zutaten werden gezeigt.
 """
 
-MEATY_WORDS = {'fleisch', 'hähnchen', 'pute', 'schwein', 'rind', 'lamm', 'wild', 'geflügel',
+MEATY_WORDS = {'fleisch', 'hähnchen', 'pute', 'schwein', 'rind', 'lamm', 'geflügel',
                'wienerle', 'schinken', 'jäger', 'speck', 'backhendl', 'hendl', 'cevapcici', 'kalb'}
 
-FISHY_WORDS = {'lachs', 'fisch', 'scholle'}
+FISHY_WORDS = {'lachs', 'fisch', 'scholle', 'aal', 'hering', 'forelle', 'thunfisch'}
 
 # Allergene.jpg
 ZUSATZ_ALLERGENE = {
@@ -768,10 +768,10 @@ def main() -> None:
         ("start", "Auswahlmenü starten"),
         ("today", "Heute"),
         ("next", "Nächster Öffnungstag"),
+        ("open", "Zeige Öffnungszeiten Mensa HBC"),
         ("allergene", "Allergene als .jpg schicken"),
         ("speiseplan_pdf", "aktuelle KW als .pdf"),
         ("help", "Hilfe"),
-        ("open", "Zeige Öffnungszeiten Mensa HBC"),
         # ("cancel", "Abbrechen"),
     ]
     
