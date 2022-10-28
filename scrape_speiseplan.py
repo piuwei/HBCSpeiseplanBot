@@ -18,7 +18,7 @@ def get_menulinks(menuurl = 'https://studierendenwerk-ulm.de/essen-trinken/speis
     # if this breaks...try sth like this and fish for the links in the <div>:
     # soup.find(id="akkordeon-speiseplan-biberach")
     for link in soup.find_all('a'):
-        if link_identifier in link.get('href'):
+        if link_identifier in link.get('href') and 'aspach' not in link.get('href').lower():
             foodlinks.append(link.get('href').replace(" ", "%20"))
             
     return foodlinks
