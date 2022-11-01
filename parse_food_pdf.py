@@ -39,16 +39,40 @@ def parse_speiseplan_to_df(fn = "Latest_Speiseplan.pdf") -> pd.DataFrame:
     
     # settings changed for new table layout on 22-10-21
     tables_lattice = camelot.read_pdf(fn,
-                                      flavor='lattice',
-                                      suppress_stdout = True,
-                                      #   process_background = True,
-                                      #   suppress_stdout=True, #quiet
-                                      #   line_tol = 2.5,
-                                      #   threshold_blocksize = 15,
-                                      #   shift_text = ['b'],
-                                      #   split_text = False,
-                                      #   layout_kwargs={'detect_vertical': False, 'word_margin' : 0.15},
-                                      )
+                                  flavor='lattice',
+                                  suppress_stdout = True,
+                                  table_areas = ['1,520,842,60'],
+                                  # strip_text = '',
+                                      
+                                  # all
+                                  # table_areas
+                                  # line_scale = 50,
+                                  # split_text = False,
+                                  
+                                  # stream
+                                  # columns
+                                  # row_tol = 21,      #2
+                                  # column_tol = 0,   #0
+                                  
+                                  
+                                  # lattice
+                                  joint_tol = 10,
+                                  threshold_blocksize = 7,
+                                  shift_text = ['b'],
+                                  process_background = True,
+                                  line_tol = 10,
+                                  line_scale = 20,
+                                  # copy_text
+                                  
+                                  #pdfminer LAParams
+                                    layout_kwargs={
+                                    #   'line_overlap':0.99,
+                                    #   'line_margin':0.7,
+                                    #   'word_margin' : 0.15,
+                                      # 'boxes_flow': 1,
+                                      },
+                                    
+                                  )
     
     df = tables_lattice[0].df
 
@@ -97,7 +121,7 @@ def main():
         
         df.to_csv(f'./Meals_CW{cw}.csv'),
     except FileNotFoundError:
-        print(f'CW{cw}, not there (yet?)')
+        print(f'CW{next_cw}, not there (yet?)')
         pass # else
     
     except:
