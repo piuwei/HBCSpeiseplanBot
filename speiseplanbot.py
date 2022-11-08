@@ -247,15 +247,17 @@ def format_meals(meal_data: pd.Series, filter='default', fmode='default') -> str
     # todo regex filter ('special'), any user defined keywords... sth. like:
     # if filter=='special:
         # filter_values.union(tbd: user_defined_words)
-        
+    
     formatted_meals = []
+    exclude_list = ['siehe Monitor', 'siehe Angebot']
     for m_idx in meal_data.index:
         meal_text = meal_data.loc[m_idx]
         if m_idx:
             meal_info_dict = parse_meal_info(meal_text)
             
             meal = meal_info_dict['meal']
-            if meal and meal != 'siehe Monitor': # exclude uninformative "siehe Monitor"
+            nonmeals = [i in meal for i in exclude_list] # exclude uninformative "siehe ..."
+            if meal and not any(nonmeals): 
                 co2 = meal_info_dict['co2_text']
                 if co2 : co2 = co2[0]
                 prices = meal_info_dict['prices_text']
@@ -690,12 +692,12 @@ def end(update: Update, context: CallbackContext) -> int:
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Displays info on how to use the bot."""
-    update.message.reply_text(HELP_MSG)
+    update.message.reply_text(HELP_MSG,
+                              parse_mode='HTML')
     
 def open_times(update: Update, context: CallbackContext) -> None:
     """Displays opening times."""
     update.message.reply_text(OPEN_TIMES,
-                              reply_markup=main_markup,
                               parse_mode='HTML')
     
 
